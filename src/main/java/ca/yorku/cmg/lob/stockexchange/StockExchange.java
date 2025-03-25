@@ -256,6 +256,249 @@ public class StockExchange {
 	                    int traderID = Integer.valueOf(parts[0].trim());
 	                    String tkr = parts[1].trim();
 	                    String type = parts[2].trim();
+	                    int qty = Integer.valueOf(ppackage ca.yorku.cmg.lob.stockexchange;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+
+import ca.yorku.cmg.lob.orderbook.Ask;
+import ca.yorku.cmg.lob.orderbook.Bid;
+import ca.yorku.cmg.lob.orderbook.Orderbook;
+import ca.yorku.cmg.lob.orderbook.Trade;
+import ca.yorku.cmg.lob.security.Security;
+import ca.yorku.cmg.lob.security.SecurityList;
+import ca.yorku.cmg.lob.stockexchange.events.NewsBoard;
+import ca.yorku.cmg.lob.stockexchange.tradingagent.TradingAgent;
+import ca.yorku.cmg.lob.stockexchange.tradingagent.TradingAgentAggressive;
+import ca.yorku.cmg.lob.stockexchange.tradingagent.TradingAgentConservative;
+import ca.yorku.cmg.lob.trader.Trader;
+import ca.yorku.cmg.lob.trader.TraderInstitutional;
+import ca.yorku.cmg.lob.trader.TraderRetail;
+import ca.yorku.cmg.lob.tradestandards.IOrder;
+
+/**
+ * Represents a stock exchange that manages securities, accounts, orders, and trades.
+ */
+public class StockExchange {
+
+		private Orderbook book;
+		private NewsBoard newsDesk;
+		
+		private SecurityList securities = new SecurityList();
+		private AccountsList accounts = new AccountsList();
+		private ArrayList<Trade> tradesLog = new ArrayList<Trade>();
+		private ArrayList<TradingAgent> traders = new ArrayList<TradingAgent>();
+		
+		private ArrayList<IOrder> log = new ArrayList<>();
+		
+		private Map<String, Integer> prices = new HashMap<String, Integer>();
+					
+		long totalFees = 0;
+
+		/**
+		 * A <a href="https://en.wikipedia.org/wiki/Method_stub">method stub</a> that traders or other calling environments can call to register a new order. <p>NOTE: the order is not processed by the stock exchange, feature yet to be implemented. Orders are kept in a list for testing.</p> 
+		 * @param order The {@linkplain IOrder} implementing object to be submitted. 
+		 * @param time The time of submission. 
+		 */
+		public void submitOrder(IOrder order, long time) {
+			if (order instanceof Bid) {
+				book.getBids().addOrder((Bid) order);
+			} else {
+				book.getAsks().addOrder((Ask) order);
+			}
+			log.add(order);
+		}
+
+		/**
+		 * A <a href="https://en.wikipedia.org/wiki/Method_stub">method stub</a> that returns the price of a ticker. <p>NOTE: the price is based on an initial list read from a file. Price identification based on consulting the Ask halfbook not implemented</p> 
+		 * @param tkr The ticker whose price is to be returned
+		 */
+		public int getPrice(String tkr) {
+			return(prices.get(tkr));
+		}
+		
+		
+		/**
+		 * Generate a string that describes the output, for testing purposes.  
+		 * @return The output
+		 */
+		public String getLogTestSample() {
+			String out = "";
+			for (IOrder r: log) {
+				out += String.format("[%3d  %s  %6d  %6d]", 
+						r.getTrader().getID(), r.getSecurity().getTicker(), r.getPrice(), r.getQuantity());
+			}
+			return(out);
+		}
+		
+		
+	    /**
+	     * Default constructor for the Exchange class.
+	     */
+		public StockExchange(){
+			book = new Orderbook();
+			newsDesk = new NewsBoard(getSecurities());
+		}
+
+		/**
+		 * Read the initial prices of the stocks from a file. Format: [Ticker, Company Title, Price]. <p>NOTE: Quick fix to be used by stubs. Price should be inferred from the Ask book.</p>. 
+		 * @param filePath The path of the file
+		 */
+		public void readPriceListfromFile(String filePath) {
+			String line;
+			String delimiter = ",";
+
+			try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+				while ((line = br.readLine()) != null) {
+					String[] parts = line.split(delimiter);
+
+					// Ensure there are exactly 3 columns
+					if (parts.length != 3) {
+						System.err.println("Invalid line format: " + line);
+						continue;
+					}
+
+					String tkr = parts[0].trim();
+					String priceStr = parts[2].trim();
+
+					try {
+						int value = Integer.parseInt(priceStr); // Convert the value to an integer
+						prices.put(tkr, value);
+					} catch (NumberFormatException e) {
+						System.err.println("Invalid number format for value: " + priceStr + " in line: " + line);
+					}
+				}
+			} catch (IOException e) {
+				System.err.println("Error reading the file: " + e.getMessage());
+			}
+
+		}
+
+		
+	    /**
+	     * Reads the security list from a file and populates the exchange.
+	     * 
+	     * @param path the path to the security list file
+	     */
+		public void readSecurityListfromFile(String path) {
+		    try (BufferedReader br = new BufferedReader(new FileReader(path))) {
+	            String line;
+	            boolean isFirstLine = true; // Skip header
+
+	            while ((line = br.readLine()) != null) {
+	                if (isFirstLine) {
+	                    isFirstLine = false;
+	                    continue;
+	                }
+	                String[] parts = line.split(",", -1); // Split by comma
+	                if (parts.length >= 2) {
+	                    String code = parts[0].trim();
+	                    String description = parts[1].trim();
+	                    securities.addSecurity(code, description);
+	                } else {
+	                    System.err.println("Skipping malformed line: " + line);
+	                }
+	            }
+	        } catch (IOException e) {
+	            e.printStackTrace();
+	        }
+		}
+		
+	    /**
+	     * Reads the accounts list from a file and populates the exchange.
+	     * 
+	     * @param path the path to the accounts list file
+	     */
+		public void readAccountsListFromFile(String filename) {
+			TradingAgentFactory tradingAgentFactory = new TradingAgentFactory();
+			
+	        try (BufferedReader reader = new BufferedReader(new FileReader(filename))) {
+	            String line;
+	            while ((line = reader.readLine()) != null) {
+	                String[] tokens = line.split(",");
+	                if (tokens.length < 3) continue; 
+
+	                String type = tokens[0].trim();  
+	                String style = tokens[1].trim();  
+	                Trader trader = new Trader(tokens[2].trim()); 
+
+	               
+	                TradingAgent agent = tradingAgentFactory.createTradingAgent(type, style, trader, this, newsboard);
+	                
+	              
+	                registerTradingAgent(agent);
+	            }
+	        } catch (IOException e) {
+	            e.printStackTrace();
+	        }
+	    }
+
+	    private void registerTradingAgent(TradingAgent agent) {
+	       trader.add(agent);
+	    }
+	    
+	    /**
+	     * Reads initial positions from a file and updates account holdings.
+	     * 
+	     * @param path the path to the initial positions file
+	     */
+		public void readInitialPositionsFromFile(String path) {
+		    try (BufferedReader br = new BufferedReader(new FileReader(path))) {
+	            String line;
+	            boolean isFirstLine = true; // Skip header
+
+	            while ((line = br.readLine()) != null) {
+	                if (isFirstLine) {
+	                    isFirstLine = false;
+	                    continue;
+	                }
+	                String[] parts = line.split(",", -1); // Split by comma
+	                if (parts.length >= 3) {
+	                    Integer tid = Integer.valueOf(parts[0].trim());
+	                    String tkr = parts[1].trim();
+	                    Integer count = Integer.valueOf(parts[2].trim());
+	                    Trader trad = accounts.getTraderByID(tid); 
+	                    //does the trader id have an account? Is the ticker supported?
+	                    if (trad == null) {
+	                    	System.err.println("Initial Balances: Trader does not exist: " + line);
+	                    } else if (securities.getSecurityByTicker(tkr) == null) { 
+	                    	System.err.println("Initial Balances: Ticker not traded in this exchange: " + line);
+	                    } else {
+	                    	accounts.getTraderAccount(trad).updatePosition(tkr, count);
+	                    }
+	                } else {
+	                    System.err.println("Skipping malformed line (too few attributes): " + line);
+	                }
+	            }
+	        } catch (IOException e) {
+	            e.printStackTrace();
+	        }
+		}
+		
+	    /**
+	     * Processes a file containing orders and submits them to the exchange.
+	     * 
+	     * @param path the path to the orders file
+	     */
+		public void processOrderFile(String path) {
+		    try (BufferedReader br = new BufferedReader(new FileReader(path))) {
+	            String line;
+	            boolean isFirstLine = true; // Skip header
+
+	            while ((line = br.readLine()) != null) {
+	                if (isFirstLine) {
+	                    isFirstLine = false;
+	                    continue;
+	                }
+	                String[] parts = line.split(",", -1); // Split by comma
+	                if (parts.length >= 6) {
+	                    int traderID = Integer.valueOf(parts[0].trim());
+	                    String tkr = parts[1].trim();
+	                    String type = parts[2].trim();
 	                    int qty = Integer.valueOf(parts[3].trim());
 	                    int price = Integer.valueOf(parts[4].trim());
 	                    long time = Long.valueOf(parts[5].trim());
@@ -389,5 +632,7 @@ public class StockExchange {
 			return newsDesk;
 		}
 
+		
+	}
 		
 	}
