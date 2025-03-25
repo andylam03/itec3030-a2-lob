@@ -4,9 +4,13 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.HashSet;
 import java.util.PriorityQueue;
 import java.util.Set;
+
+import org.w3c.dom.events.Event;
 
 import ca.yorku.cmg.lob.security.Security;
 import ca.yorku.cmg.lob.security.SecurityList;
@@ -20,6 +24,8 @@ public class NewsBoard {
 	PriorityQueue<Event> eventQueue = new PriorityQueue<>((e1, e2) -> Long.compare(e1.getTime(), e2.getTime()));
 
 	SecurityList securities;
+	
+	private List<INewsObserver> observers = new ArrayList<>();
 	
 	public NewsBoard(SecurityList x) {
 		this.securities = x;
@@ -87,36 +93,28 @@ public class NewsBoard {
     }
 
 	
-	//Get the event at time time
-	/**
-	 * Returns the event that happened at time {@code time}
-	 * @param time The time at which the event happened.
-	 * @return The event that happened at that time, or {@code null} if no event happened at that time. 
-	 */
-	public Event getEventAt(long time) {
-		
-		PriorityQueue<Event> clonedQueue = new PriorityQueue<>(eventQueue);
-		Event e = null;
-		
-		while (!clonedQueue.isEmpty()) {
-			long next = clonedQueue.peek().getTime();
-			if (time > next) {
-				clonedQueue.poll();
-			} else if (time < next) {
-				return(null);
-			} else {//time == next
-				return(clonedQueue.poll());
-			}
-		}
-		return (e);
-	}
-	
-	
 	/**
 	 * Stub for the observer part. Runs the entire queue of events and sends notifications to registered trading agents.   
 	 */
 	public void runEventsList() {
-
+		while (!eventQueue.isEmpty()) {
+			Event event = eventQueue.poll();
+			notifyObservers(event);
+		}
+	}
+	
+	public void registerObserver(INewsObserver observer) {
+		observers.add(observer);
+	}
+	
+	public void removeObserver(INewsObserver observer) {
+		observers.remove(observer);
+	}
+	
+	private void notifyObservers(Event event) {
+		for (INewsObserver observer : observers) {
+			observer.update(event);
+		}
 	}
 	
 	
