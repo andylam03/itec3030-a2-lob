@@ -42,9 +42,5 @@ public abstract class TradingAgent implements INewsObserver{
 	 * @param pos The position (number of units) of the trader to the ticker that is mentioned in the Event.
 	 * @param price The current price of the relevant ticker. 
 	 */
-	protected abstract void actOnEvent(Event e, int pos, int price);
-	
-	
-	
 
 }
